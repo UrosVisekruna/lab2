@@ -273,6 +273,12 @@ dir_blue    <=x"FF" when dir_pixel_column<(H_RES/8) else
   --char_value
   --char_we
   
+  
+  
+  
+  
+  
+  
   -- koristeci signale realizovati logiku koja pise po GRAPH_MEM
   --pixel_address
   --pixel_value
