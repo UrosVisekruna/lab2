@@ -32,7 +32,10 @@ entity top is
     sync_o         : out std_logic;
     red_o          : out std_logic_vector(7 downto 0);
     green_o        : out std_logic_vector(7 downto 0);
-    blue_o         : out std_logic_vector(7 downto 0)
+    blue_o         : out std_logic_vector(7 downto 0);
+	 display_mode_i	 : in std_logic_vector (1 downto 0);
+	 direct_mode_i  : in std_logic
+	 
    );
 end top;
 
@@ -103,7 +106,7 @@ architecture rtl of top is
     );
   end component;
   
-   component reg
+  component reg is
 	generic(
 		WIDTH    : positive := 1;
 		RST_INIT : integer := 0
@@ -114,9 +117,8 @@ architecture rtl of top is
 		i_d    : in  std_logic_vector(WIDTH-1 downto 0);
 		o_q    : out std_logic_vector(WIDTH-1 downto 0)
 	);
-  end component;
-  
-  
+	
+end component reg;
   
   component ODDR2
   generic(
@@ -142,13 +144,16 @@ architecture rtl of top is
   constant GRAPH_MEM_ADDR_WIDTH : natural := MEM_ADDR_WIDTH + 6;-- graphics addres is scales with minumum char size 8*8 log2(64) = 6
   
   -- text
-  signal next_txt_addr		  : std_logic_vector(MEM_ADDR_WIDTH-1 downto 0);
-  signal txt_addr_reg		  : std_logic_vector(MEM_ADDR_WIDTH-1 downto 0);
   
   signal message_lenght      : std_logic_vector(MEM_ADDR_WIDTH-1 downto 0);
   signal graphics_lenght     : std_logic_vector(GRAPH_MEM_ADDR_WIDTH-1 downto 0);
-  
   signal direct_mode         : std_logic;
+  signal next_text_addr		  : std_logic_vector(MEM_ADDR_WIDTH-1 downto 0);
+  signal current_text_addr		  : std_logic_vector(MEM_ADDR_WIDTH-1 downto 0);
+  --graphic
+  signal next_pix_addr		  : std_logic_vector(GRAPH_MEM_ADDR_WIDTH-1 downto 0);
+  signal current_pix_addr		  : std_logic_vector(GRAPH_MEM_ADDR_WIDTH-1 downto 0);
+  
   --
   signal font_size           : std_logic_vector(3 downto 0);
   signal show_frame          : std_logic;
@@ -186,8 +191,8 @@ begin
   graphics_lenght <= conv_std_logic_vector(MEM_SIZE*8*8, GRAPH_MEM_ADDR_WIDTH);
   
   -- removed to inputs pin
-  direct_mode <= '1';
-  display_mode     <= "10";  -- 01 - text mode, 10 - graphics mode, 11 - text & graphics
+  direct_mode <= direct_mode_i;
+  display_mode     <= display_mode_i;  -- 01 - text mode, 10 - graphics mode, 11 - text & graphics
   
   font_size        <= x"1";
   show_frame       <= '1';
@@ -264,69 +269,104 @@ begin
     blue_o             => blue_o     
   );
   
-  
-   next_txt_addr <= txt_addr_reg + 1 when txt_addr_reg < 1200-1
-	
-	else conv_std_logic_vector(0, MEM_ADDR_WIDTH);
-	
-   txt_addr_cnt: reg
-	
-	generic map(
-		WIDTH    => MEM_ADDR_WIDTH,
-		RST_INIT => 0
-	)
-	port map(
-		i_clk  => pix_clock_s,
-		in_rst => vga_rst_n_s,
-		i_d    => next_txt_addr,
-		o_q    => txt_addr_reg
+	next_text_addr<=current_text_addr+1 when current_text_addr<1200-1
+			else conv_std_logic_vector(0,MEM_ADDR_WIDTH);
+			
+	txt_reg: reg
+		generic map(
+			WIDTH => MEM_ADDR_WIDTH,
+			RST_INIT =>0
+		)
+		port map(
+		i_clk  =>pix_clock_s,
+		in_rst =>vga_rst_n_s,
+		i_d    =>next_text_addr,
+		o_q    =>current_text_addr
 	);
-  
-  
+	
+	graphic_reg: reg
+		generic map(
+			WIDTH => GRAPH_MEM_ADDR_WIDTH,
+			RST_INIT =>0
+		)
+		port map(
+		i_clk  =>pix_clock_s,
+		in_rst =>vga_rst_n_s,
+		i_d    =>next_pix_addr,
+		o_q    =>current_pix_addr
+	);
+  next_pix_addr<=current_pix_addr+1 when current_pix_addr < 9600-1
+						else conv_std_logic_vector(0,GRAPH_MEM_ADDR_WIDTH);
   -- na osnovu signala iz vga_top modula dir_pixel_column i dir_pixel_row realizovati logiku koja genereise
   --dir_red
   --dir_green
   --dir_blue
- dir_red 		<= x"FF" when dir_pixel_column<2*(H_RES/8) else
-					   x"00" when dir_pixel_column >=2*(H_RES/8) and dir_pixel_column <4*(H_RES/8)  else
-					   x"FF" when dir_pixel_column >=4*(H_RES/8)and dir_pixel_column <6*(H_RES/8) else
-					   x"00";
-						
-dir_blue    <=x"FF" when dir_pixel_column<(H_RES/8) else
-              x"00" when dir_pixel_column>=(H_RES/8)and dir_pixel_column<2*(H_RES/8)else
-					x"FF"when dir_pixel_column>=2*(H_RES/8)and dir_pixel_column<3*(H_RES/8)else
-					 x"00" when dir_pixel_column>=3*(H_RES/8)and dir_pixel_column<4*(H_RES/8)else
-					x"FF"when dir_pixel_column>=4*(H_RES/8)and dir_pixel_column<5*(H_RES/8)else
-					 x"00" when dir_pixel_column>=5*(H_RES/8)and dir_pixel_column<6*(H_RES/8)else
-					x"FF"when dir_pixel_column>=6*(H_RES/8)and dir_pixel_column<7*(H_RES/8)else
-					x"00";
- dir_green   <= x"FF" when dir_pixel_column<=4*(H_RES/8)else
-					x"00";
-					
-						
- 
+	dir_red<=x"FF" when dir_pixel_column < 2*(H_RES/8) else
+				x"00" when dir_pixel_column >= 2*(H_RES/8) and dir_pixel_column < 4*(H_RES/8) else
+				x"FF" when dir_pixel_column >= 4*(H_RES/8) and dir_pixel_column < 6*(H_RES/8) else
+				x"00";
+	dir_blue<=x"FF" when dir_pixel_column < (H_RES/8) else
+				 x"00" when dir_pixel_column >=(H_RES/8) and dir_pixel_column < 2*(H_RES/8) else
+				 x"FF" when dir_pixel_column >=2*(H_RES/8) and dir_pixel_column < 3*(H_RES/8) else
+				 x"00" when dir_pixel_column >=3*(H_RES/8) and dir_pixel_column < 4*(H_RES/8) else
+				 x"FF" when dir_pixel_column >=4*(H_RES/8) and dir_pixel_column < 5*(H_RES/8) else
+				 x"00" when dir_pixel_column >=5*(H_RES/8) and dir_pixel_column < 6*(H_RES/8) else
+				 x"FF" when dir_pixel_column >=6*(H_RES/8) and dir_pixel_column < 7*(H_RES/8) else
+				 x"00";
+	dir_green<=x"FF" when dir_pixel_column <= 4*(H_RES/8) else
+				  x"00";
+
   -- koristeci signale realizovati logiku koja pise po TXT_MEM
   --char_address
   --char_value
   --char_we
-  
-  
-  char_address<=txt_addr_reg;
-  with char_address select char_value <=  o"52" when conv_std_logic_vector(1,MEM_ADDR_WIDTH),
-														o"25" when conv_std_logic_vector(2,MEM_ADDR_WIDTH),
-														o"22" when conv_std_logic_vector(3,MEM_ADDR_WIDTH),
-														o"17" when conv_std_logic_vector(4,MEM_ADDR_WIDTH),
-														o"23" when conv_std_logic_vector(5,MEM_ADDR_WIDTH),
-														o"40" when others;
-	char_we<='1';
-  
-  
-  
+  --ispis mog cenjenog imena u godnjem levom uglu ekrana
+  char_we<='1';
+  char_address<=current_text_addr;
+  with char_address select char_value<= o"25" when conv_std_logic_vector(48,MEM_ADDR_WIDTH),
+													 o"22" when conv_std_logic_vector(49,MEM_ADDR_WIDTH),
+													 o"17" when conv_std_logic_vector(50,MEM_ADDR_WIDTH),-- else
+													 o"23" when conv_std_logic_vector(51,MEM_ADDR_WIDTH),-- else
+													 o"53" when conv_std_logic_vector(52,MEM_ADDR_WIDTH),-- else
+													 o"40" when others;
+					
   
   -- koristeci signale realizovati logiku koja pise po GRAPH_MEM
   --pixel_address
   --pixel_value
-  --pixel_we
-  
-  
+  --pixel_w
+  --
+  pixel_we<='1';
+  pixel_address<=current_pix_addr;
+  pixel_value <=	x"FFFFFFFF" when pixel_address=4410 else
+						x"FFFFFFFF" when pixel_address=4430 else
+						x"FFFFFFFF" when pixel_address=4450 else
+						x"FFFFFFFF" when pixel_address=4470 else
+						x"FFFFFFFF" when pixel_address=4490 else
+						x"FFFFFFFF" when pixel_address=4510 else
+						x"FFFFFFFF" when pixel_address=4530 else
+						x"FFFFFFFF" when pixel_address=4550 else
+						x"FFFFFFFF" when pixel_address=4570 else
+						x"FFFFFFFF" when pixel_address=4590 else
+						x"FFFFFFFF" when pixel_address=4610 else
+						x"FFFFFFFF" when pixel_address=4630 else
+						x"FFFFFFFF" when pixel_address=4650 else
+						x"FFFFFFFF" when pixel_address=4670 else
+						x"FFFFFFFF" when pixel_address=4690 else
+						x"FFFFFFFF" when pixel_address=4710 else
+						x"FFFFFFFF" when pixel_address=4730 else
+						x"FFFFFFFF" when pixel_address=4750 else
+						x"FFFFFFFF" when pixel_address=4770 else
+						x"FFFFFFFF" when pixel_address=4790 else
+						x"FFFFFFFF" when pixel_address=4810 else
+						x"FFFFFFFF" when pixel_address=4830 else
+						x"FFFFFFFF" when pixel_address=4850 else
+						x"FFFFFFFF" when pixel_address=4870 else
+						x"FFFFFFFF" when pixel_address=4890 else
+						x"FFFFFFFF" when pixel_address=4910 else
+						x"FFFFFFFF" when pixel_address=4930 else
+						x"FFFFFFFF" when pixel_address=4950 else
+						x"FFFFFFFF" when pixel_address=4970 else
+						x"FFFFFFFF" when pixel_address=4990 else
+						x"00000000";
 end rtl;
