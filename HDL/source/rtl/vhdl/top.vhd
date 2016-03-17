@@ -334,7 +334,7 @@ begin
   -- koristeci signale realizovati logiku koja pise po GRAPH_MEM
   --pixel_address
   --pixel_value
-  --pixel_w
+  --pixel_w    --
   --
   pixel_we<='1';
   pixel_address<=current_pix_addr;
